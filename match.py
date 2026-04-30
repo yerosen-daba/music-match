@@ -152,8 +152,8 @@ async def get_recommendations(songs1: list[dict], songs2: list[dict]) -> list[di
                     pool.append(aid)
         return pool
 
-    new_artist_ids1 = build_new_pool(related_batches[:len(artist_ids1)])[:8]
-    new_artist_ids2 = build_new_pool(related_batches[len(artist_ids1):])[:8]
+    new_artist_ids1 = build_new_pool(related_batches[:len(artist_ids1)])[:6]
+    new_artist_ids2 = build_new_pool(related_batches[len(artist_ids1):])[:6]
 
     # ── Step 3: Get top tracks from related artists ──
     async def fetch_top_tracks(artist_id: str, limit: int = 3):
@@ -170,7 +170,7 @@ async def get_recommendations(songs1: list[dict], songs2: list[dict]) -> list[di
 
     all_new_ids = new_artist_ids1 + new_artist_ids2
     track_batches = await asyncio.gather(*[
-        fetch_top_tracks(aid, limit=2) for aid in all_new_ids
+        fetch_top_tracks(aid, limit=1) for aid in all_new_ids
     ])
 
     # Build candidate track dicts (formatted for enrich_track)
@@ -195,8 +195,8 @@ async def get_recommendations(songs1: list[dict], songs2: list[dict]) -> list[di
                     })
         return candidates
 
-    candidates1 = build_candidates(track_batches[:len(new_artist_ids1)])[:10]
-    candidates2 = build_candidates(track_batches[len(new_artist_ids1):])[:10]
+    candidates1 = build_candidates(track_batches[:len(new_artist_ids1)])[:6]
+    candidates2 = build_candidates(track_batches[len(new_artist_ids1):])[:6]
 
     # ── Step 4: Enrich candidates with librosa (energy, tempo, valence) ──
     all_candidates = candidates1 + candidates2

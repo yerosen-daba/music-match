@@ -63,7 +63,7 @@ async def enrich_track(track: dict) -> dict:
             # Download the 30-second preview
             audio_r = await client.http_client.get(preview_url)
             if audio_r.status_code == 200 and len(audio_r.content) > 1000:
-                features = analyze_preview(audio_r.content)
+                features = await asyncio.to_thread(analyze_preview, audio_r.content)
 
                 # Cross-check tempo with Deezer's BPM if available
                 if deezer_bpm > 0:
