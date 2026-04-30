@@ -702,7 +702,7 @@
 
   <script>
     // ── Update this URL if your Codespaces URL changes ──
-    const API = 'http://localhost:8000';
+    const API = 'https://music-match-3z21.onrender.com';
 
     function getSongs(containerId) {
       return Array.from(document.querySelectorAll(`#${containerId} .song-input`))
@@ -885,8 +885,8 @@
         panel.innerHTML = results.map((r, i) => `
           <div class="suggestion-item" data-i="${i}">
             ${r.image
-              ? `<img class="suggestion-art" src="${esc(r.image)}" alt="" loading="lazy"/>`
-              : '<div class="suggestion-art"></div>'}
+            ? `<img class="suggestion-art" src="${esc(r.image)}" alt="" loading="lazy"/>`
+            : '<div class="suggestion-art"></div>'}
             <div class="suggestion-text">
               <div class="suggestion-name">${esc(r.name)}</div>
               <div class="suggestion-artist">${esc(r.artist)}</div>
