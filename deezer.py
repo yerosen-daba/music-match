@@ -67,26 +67,20 @@ async def enrich_track(track: dict) -> dict:
 
     features = {"energy": 0.5, "tempo": 120.0, "valence": 0.5}
 
-    if preview_url:
+    # Bypass librosa MP3 downloads entirely to guarantee < 5 second response times on Render.
+    # Proxy 'energy' from song popularity rank, keep tempo, proxy 'valence' from release era.
+    rank = detail.get("rank", 500000)
+    features["energy"] = min(rank / 1000000.0, 1.0)
+    
+    if deezer_bpm > 0:
+        features["tempo"] = float(deezer_bpm)
+        
+    if release_date:
         try:
-            # Download the 30-second preview
-            audio_r = await client.http_client.get(preview_url)
-            if audio_r.status_code == 200 and len(audio_r.content) > 1000:
-                # Use a semaphore to prevent CPU thrashing on Render's weak CPU
-                sem = get_semaphore()
-                async with sem:
-                    features = await asyncio.to_thread(analyze_preview, audio_r.content)
-
-                # Cross-check tempo with Deezer's BPM if available
-                if deezer_bpm > 0:
-                    # If librosa and Deezer agree (within 20%), use librosa.
-                    # Otherwise, prefer Deezer's BPM (may be more reliable for
-                    # songs with complex rhythms)
-                    ratio = features["tempo"] / deezer_bpm if deezer_bpm else 1.0
-                    if ratio < 0.8 or ratio > 1.2:
-                        features["tempo"] = deezer_bpm
+            year = int(release_date.split("-")[0])
+            features["valence"] = min(max((year - 1970) / 55.0, 0.0), 1.0)
         except Exception:
-            pass  # Fall through to defaults
+            pass
 
     enriched = {
         **track,
