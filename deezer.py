@@ -14,7 +14,7 @@ _analysis_semaphore = None
 def get_semaphore():
     global _analysis_semaphore
     if _analysis_semaphore is None:
-        _analysis_semaphore = asyncio.Semaphore(4)
+        _analysis_semaphore = asyncio.Semaphore(1)
     return _analysis_semaphore
 
 async def search_track(query: str) -> dict | None:
