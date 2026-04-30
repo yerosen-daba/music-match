@@ -8,6 +8,9 @@ DEEZER_TRACK  = "https://api.deezer.com/track"
 # Maps Deezer track ID → dict with audio features so we don't re-download
 _feature_cache: dict[int, dict] = {}
 
+# Limit concurrent CPU-heavy librosa threads to 2 to prevent CPU thrashing
+_analysis_semaphore = asyncio.Semaphore(2)
+
 async def search_track(query: str) -> dict | None:
     """Search Deezer for a track and return basic metadata."""
     r = await client.http_client.get(DEEZER_SEARCH, params={
@@ -63,7 +66,9 @@ async def enrich_track(track: dict) -> dict:
             # Download the 30-second preview
             audio_r = await client.http_client.get(preview_url)
             if audio_r.status_code == 200 and len(audio_r.content) > 1000:
-                features = await asyncio.to_thread(analyze_preview, audio_r.content)
+                # Use a semaphore to prevent CPU thrashing on Render's weak CPU
+                async with _analysis_semaphore:
+                    features = await asyncio.to_thread(analyze_preview, audio_r.content)
 
                 # Cross-check tempo with Deezer's BPM if available
                 if deezer_bpm > 0:
