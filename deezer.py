@@ -8,8 +8,8 @@ DEEZER_TRACK  = "https://api.deezer.com/track"
 # Maps Deezer track ID → dict with audio features so we don't re-download
 _feature_cache: dict[int, dict] = {}
 
-# Limit concurrent CPU-heavy librosa threads to 2 to prevent CPU thrashing
-_analysis_semaphore = asyncio.Semaphore(2)
+# Limit concurrent CPU-heavy librosa threads to 4 to utilize the upgraded CPU
+_analysis_semaphore = asyncio.Semaphore(4)
 
 async def search_track(query: str) -> dict | None:
     """Search Deezer for a track and return basic metadata."""
