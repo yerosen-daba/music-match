@@ -26,31 +26,31 @@ def analyze_preview(audio_bytes: bytes) -> dict:
         except OSError:
             pass
 
+    # Pre-compute STFT once to save massive CPU time instead of computing it 3 times
+    S = np.abs(librosa.stft(y))
+
     # --- Energy: RMS loudness, normalized to 0–1 ---
-    rms = librosa.feature.rms(y=y)[0]
+    rms = librosa.feature.rms(S=S)[0]
     # Typical RMS for music: ~0.02 (quiet acoustic) to ~0.35 (loud EDM/rap)
     raw_energy = float(np.mean(rms))
     energy = min(raw_energy / 0.30, 1.0)  # 0.30 RMS → 1.0 energy
 
     # --- Tempo: BPM from beat tracking ---
-    tempo_val, _ = librosa.beat.beat_track(y=y, sr=sr)
-    # librosa may return an array; extract scalar
-    if hasattr(tempo_val, '__len__'):
-        tempo_val = float(tempo_val[0]) if len(tempo_val) > 0 else 120.0
-    tempo = float(tempo_val)
+    # SKIPPED: librosa beat tracking is extremely slow and Deezer already provides the BPM!
+    tempo = 0.0
 
     # --- Valence (mood proxy) ---
     # Combine spectral brightness (centroid) with harmonic mode.
     # Brighter + major-key songs tend to sound "happier".
 
     # Spectral centroid → brightness, normalized 0–1
-    centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+    centroid = librosa.feature.spectral_centroid(S=S, sr=sr)[0]
     # Typical centroid range: 500–5000 Hz for music
     brightness = float(np.mean(centroid))
     brightness_norm = min(max((brightness - 500) / 4500, 0.0), 1.0)
 
     # Chroma-based mode estimation (major vs minor)
-    chroma = librosa.feature.chroma_stft(y=y, sr=sr)
+    chroma = librosa.feature.chroma_stft(S=S, sr=sr)
     chroma_mean = np.mean(chroma, axis=1)
     # Major key indicator: strong 1st, 3rd (major third), 5th intervals
     # Minor key indicator: strong 1st, flat-3rd, 5th intervals

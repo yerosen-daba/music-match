@@ -152,8 +152,8 @@ async def get_recommendations(songs1: list[dict], songs2: list[dict]) -> list[di
                     pool.append(aid)
         return pool
 
-    new_artist_ids1 = build_new_pool(related_batches[:len(artist_ids1)])[:5]
-    new_artist_ids2 = build_new_pool(related_batches[len(artist_ids1):])[:5]
+    new_artist_ids1 = build_new_pool(related_batches[:len(artist_ids1)])[:3]
+    new_artist_ids2 = build_new_pool(related_batches[len(artist_ids1):])[:3]
 
     # ── Step 3: Get top tracks from related artists ──
     async def fetch_top_tracks(artist_id: str, limit: int = 3):
