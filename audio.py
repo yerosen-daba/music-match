@@ -18,7 +18,8 @@ def analyze_preview(audio_bytes: bytes) -> dict:
     try:
         os.write(fd, audio_bytes)
         os.close(fd)
-        y, sr = librosa.load(tmp_path, sr=None, mono=True)
+        # Only process 5 seconds of audio to massively speed up the math
+        y, sr = librosa.load(tmp_path, sr=None, mono=True, duration=5.0)
     finally:
         try:
             os.unlink(tmp_path)
