@@ -18,7 +18,7 @@ def analyze_preview(audio_bytes: bytes) -> dict:
     try:
         os.write(fd, audio_bytes)
         os.close(fd)
-        y, sr = librosa.load(tmp_path, sr=22050, mono=True)
+        y, sr = librosa.load(tmp_path, sr=None, mono=True)
     finally:
         try:
             os.unlink(tmp_path)
@@ -49,7 +49,7 @@ def analyze_preview(audio_bytes: bytes) -> dict:
     brightness_norm = min(max((brightness - 500) / 4500, 0.0), 1.0)
 
     # Chroma-based mode estimation (major vs minor)
-    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    chroma = librosa.feature.chroma_stft(y=y, sr=sr)
     chroma_mean = np.mean(chroma, axis=1)
     # Major key indicator: strong 1st, 3rd (major third), 5th intervals
     # Minor key indicator: strong 1st, flat-3rd, 5th intervals
