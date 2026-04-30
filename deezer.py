@@ -9,7 +9,13 @@ DEEZER_TRACK  = "https://api.deezer.com/track"
 _feature_cache: dict[int, dict] = {}
 
 # Limit concurrent CPU-heavy librosa threads to 4 to utilize the upgraded CPU
-_analysis_semaphore = asyncio.Semaphore(4)
+_analysis_semaphore = None
+
+def get_semaphore():
+    global _analysis_semaphore
+    if _analysis_semaphore is None:
+        _analysis_semaphore = asyncio.Semaphore(4)
+    return _analysis_semaphore
 
 async def search_track(query: str) -> dict | None:
     """Search Deezer for a track and return basic metadata."""
@@ -67,7 +73,8 @@ async def enrich_track(track: dict) -> dict:
             audio_r = await client.http_client.get(preview_url)
             if audio_r.status_code == 200 and len(audio_r.content) > 1000:
                 # Use a semaphore to prevent CPU thrashing on Render's weak CPU
-                async with _analysis_semaphore:
+                sem = get_semaphore()
+                async with sem:
                     features = await asyncio.to_thread(analyze_preview, audio_r.content)
 
                 # Cross-check tempo with Deezer's BPM if available
