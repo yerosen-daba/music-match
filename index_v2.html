@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Music Match</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #222;
+      --accent: #1DB954;
+      --crimson: #C8102E;
+      --text: #f0f0f0;
+      --muted: #666;
+      --mono: 'DM Mono', monospace;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px 80px;
+    }
+
+    /* ── Header ──────────────────────────────────────────── */
+    .header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .header h1 {
+      font-size: clamp(36px, 8vw, 72px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      background: linear-gradient(135deg, var(--accent) 0%, #ffffff 60%, var(--crimson) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header p {
+      margin-top: 12px;
+      font-size: 14px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    /* ── Card ────────────────────────────────────────────── */
+    .card {
+      width: 100%;
+      max-width: 680px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 36px;
+      margin-bottom: 20px;
+    }
+
+    .card-label {
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    /* ── Inputs ──────────────────────────────────────────── */
+    .name-input {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      padding: 14px 16px;
+      outline: none;
+      margin-bottom: 20px;
+      transition: border-color .2s;
+    }
+
+    .name-input:focus {
+      border-color: var(--accent);
+    }
+
+    .name-input::placeholder {
+      color: #333;
+    }
+
+    .song-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .song-num {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      width: 20px;
+      flex-shrink: 0;
+    }
+
+    .song-input {
+      flex: 1;
+      background: #1a1a1a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 14px;
+      padding: 11px 14px;
+      outline: none;
+      transition: border-color .2s;
+    }
+
+    .song-input:focus {
+      border-color: var(--accent);
+    }
+
+    .song-input::placeholder {
+      color: #333;
+    }
+
+    /* ── Autocomplete suggestions ────────────────────────── */
+    .song-input-wrap {
+      position: relative;
+      flex: 1;
+      /* takes the space the input used to take in .song-row */
+      min-width: 0;
+    }
+
+    .song-input-wrap .song-input {
+      width: 100%;
+      /* input is no longer a direct flex child of .song-row */
+    }
+
+    .suggestions {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: #161616;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      z-index: 50;
+      max-height: 280px;
+      overflow-y: auto;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55);
+    }
+
+    .suggestions[hidden] {
+      display: none;
+    }
+
+    .suggestion-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #1f1f1f;
+    }
+
+    .suggestion-item:last-child {
+      border-bottom: none;
+    }
+
+    .suggestion-item:hover,
+    .suggestion-item.active {
+      background: #1f1f1f;
+    }
+
+    .suggestion-art {
+      width: 32px;
+      height: 32px;
+      border-radius: 4px;
+      background: #222;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .suggestion-text {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .suggestion-name {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .suggestion-artist {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .suggestions-status {
+      padding: 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      font-family: var(--mono);
+    }
+
+    /* ── Button ──────────────────────────────────────────── */
+    .match-btn {
+      width: 100%;
+      max-width: 680px;
+      padding: 18px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 14px;
+      font-family: 'Syne', sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+      margin-bottom: 32px;
+    }
+
+    .match-btn:hover {
+      opacity: 0.88;
+    }
+
+    .match-btn:active {
+      transform: scale(0.98);
+    }
+
+    /* ── Loading ─────────────────────────────────────────── */
+    .loading {
+      text-align: center;
+      padding: 40px;
+      display: none;
+    }
+
+    .loading-dots {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: bounce 1.2s infinite;
+    }
+
+    .dot:nth-child(2) {
+      animation-delay: .2s;
+    }
+
+    .dot:nth-child(3) {
+      animation-delay: .4s;
+    }
+
+    @keyframes bounce {
+
+      0%,
+      80%,
+      100% {
+        transform: scale(0.8);
+        opacity: 0.5;
+      }
+
+      40% {
+        transform: scale(1.2);
+        opacity: 1;
+      }
+    }
+
+    .loading p {
+      color: var(--muted);
+      font-size: 14px;
+      letter-spacing: 0.08em;
+    }
+
+    /* ── Results ─────────────────────────────────────────── */
+    .results {
+      width: 100%;
+      max-width: 680px;
+      display: none;
+    }
+
+    /* Score card */
+    .score-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px;
+      text-align: center;
+      margin-bottom: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .score-card::before {
+      content: '';
+      position: absolute;
+      top: -60px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(29, 185, 84, 0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .score-number {
+      font-size: clamp(72px, 15vw, 120px);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+
+    .score-label {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .score-message {
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.4;
+      max-width: 400px;
+      margin: 0 auto 28px;
+    }
+
+    .breakdown {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .breakdown-item {
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 16px 12px;
+      text-align: center;
+    }
+
+    .breakdown-score {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .breakdown-max {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .breakdown-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-top: 6px;
+    }
+
+    /* Vibe cards */
+    .vibes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .vibe-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
+    .vibe-name {
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+
+    .vibe-label {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    /* Recommendations */
+    .recs-card {
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .recs-title {
+      font-size: 12px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .rec-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      text-decoration: none;
+      color: var(--text);
+      transition: opacity .2s;
+    }
+
+    .rec-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .rec-item:hover {
+      opacity: 0.7;
+    }
+
+    .rec-art {
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
+      background: #222;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .rec-name {
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .rec-artist {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* Song lists */
+    .songs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .songs-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
+    .songs-title {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 14px;
+    }
+
+    .song-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .song-art {
+      width: 36px;
+      height: 36px;
+      border-radius: 4px;
+      background: #222;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .song-title {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .song-artist {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* Reset */
+    .reset-btn {
+      width: 100%;
+      padding: 14px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--muted);
+      font-family: 'Syne', sans-serif;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all .2s;
+      margin-bottom: 20px;
+    }
+
+    .reset-btn:hover {
+      border-color: var(--text);
+      color: var(--text);
+    }
+
+    .error-msg {
+      color: #e07070;
+      font-size: 14px;
+      text-align: center;
+      padding: 16px;
+      background: rgba(200, 16, 46, 0.08);
+      border-radius: 10px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    @media (max-width: 480px) {
+
+      .vibes,
+      .songs-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .card {
+        padding: 24px 20px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="header">
+    <h1>Music Match</h1>
+    <p>Find your sound compatibility</p>
+  </div>
+
+  <!-- ── Input Form ─────────────────────────────────────────── -->
+  <div id="form-section">
+    <div class="card">
+      <div class="card-label">Person 1</div>
+      <input class="name-input" id="name1" placeholder="Your name" maxlength="30" />
+      <div id="songs1">
+        <div class="song-row"><span class="song-num">1.</span><input class="song-input"
+            placeholder="Song name or artist + song" /></div>
+        <div class="song-row"><span class="song-num">2.</span><input class="song-input"
+            placeholder="Song name or artist + song" /></div>
+        <div class="song-row"><span class="song-num">3.</span><input class="song-input"
+            placeholder="Song name or artist + song" /></div>
+        <div class="song-row"><span class="song-num">4.</span><input class="song-input"
+            placeholder="Song name or artist + song" /></div>
+        <div class="song-row"><span class="song-num">5.</span><input class="song-input"
+            placeholder="Song name or artist + song" /></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Person 2</div>
+      <input class="name-input" id="name2" placeholder="Friend's name" maxlength="30" />
+      <div id="songs2">
+        <div class="song-row"><span class="song-num">1.</span><input class="song-input"
+            placeholder="Song name or artist + song" /></div>
+        <div class="song-row"><span class="song-num">2.</span><input class="song-input"
+            placeholder="Song name or artist + song" /></div>
+        <div class="song-row"><span class="song-num">3.</span><input class="song-input"
+            placeholder="Song name or artist + song" /></div>
+        <div class="song-row"><span class="song-num">4.</span><input class="song-input"
+            placeholder="Song name or artist + song" /></div>
+        <div class="song-row"><span class="song-num">5.</span><input class="song-input"
+            placeholder="Song name or artist + song" /></div>
+      </div>
+    </div>
+
+    <div class="error-msg" id="error-msg"></div>
+    <button class="match-btn" onclick="doMatch()">Find Our Match →</button>
+  </div>
+
+  <!-- ── Loading ────────────────────────────────────────────── -->
+  <div class="loading" id="loading">
+    <div class="loading-dots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+    <p>Analyzing your music…</p>
+  </div>
+
+  <!-- ── Results ────────────────────────────────────────────── -->
+  <div class="results" id="results">
+
+    <!-- Score -->
+    <div class="score-card">
+      <div class="score-number" id="score-number">--</div>
+      <div class="score-label">Compatibility Score</div>
+      <div class="score-message" id="score-message"></div>
+      <div style="font-size:13px;color:var(--muted)" id="names-label"></div>
+      <div class="breakdown">
+        <div class="breakdown-item">
+          <div class="breakdown-score" id="energy-score">--</div>
+          <div class="breakdown-max">/40</div>
+          <div class="breakdown-label">Energy</div>
+        </div>
+        <div class="breakdown-item">
+          <div class="breakdown-score" id="tempo-score">--</div>
+          <div class="breakdown-max">/30</div>
+          <div class="breakdown-label">Tempo</div>
+        </div>
+        <div class="breakdown-item">
+          <div class="breakdown-score" id="valence-score">--</div>
+          <div class="breakdown-max">/30</div>
+          <div class="breakdown-label">Mood</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vibes -->
+    <div class="vibes">
+      <div class="vibe-card">
+        <div class="vibe-name" id="vibe1-name">Person 1</div>
+        <div class="vibe-label" id="vibe1-label">—</div>
+      </div>
+      <div class="vibe-card">
+        <div class="vibe-name" id="vibe2-name">Person 2</div>
+        <div class="vibe-label" id="vibe2-label">—</div>
+      </div>
+    </div>
+
+    <!-- Recommendations -->
+    <div class="recs-card">
+      <div class="recs-title">🎵 Songs You'd Both Love</div>
+      <div id="recs-list"></div>
+    </div>
+
+    <!-- Each person's songs -->
+    <div class="songs-grid">
+      <div class="songs-card">
+        <div class="songs-title" id="songs1-title">Person 1's songs</div>
+        <div id="songs1-list"></div>
+      </div>
+      <div class="songs-card">
+        <div class="songs-title" id="songs2-title">Person 2's songs</div>
+        <div id="songs2-list"></div>
+      </div>
+    </div>
+
+    <button class="reset-btn" onclick="reset()">← Try again</button>
+  </div>
+
+  <script>
+    // ── Update this URL if your Codespaces URL changes ──
+    const API = 'http://localhost:8000';
+
+    function getSongs(containerId) {
+      return Array.from(document.querySelectorAll(`#${containerId} .song-input`))
+        .map(i => i.value.trim())
+        .filter(v => v.length > 0);
+    }
+
+    async function doMatch() {
+      const name1 = document.getElementById('name1').value.trim();
+      const name2 = document.getElementById('name2').value.trim();
+      const songs1 = getSongs('songs1');
+      const songs2 = getSongs('songs2');
+
+      document.getElementById('error-msg').style.display = 'none';
+      if (!name1 || !name2) { showError('Please enter both names.'); return; }
+      if (songs1.length < 3) { showError('Person 1 needs at least 3 songs.'); return; }
+      if (songs2.length < 3) { showError('Person 2 needs at least 3 songs.'); return; }
+
+      document.getElementById('form-section').style.display = 'none';
+      document.getElementById('loading').style.display = 'block';
+
+      try {
+        const res = await fetch(`${API}/match`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            person1_name: name1, person1_songs: songs1,
+            person2_name: name2, person2_songs: songs2,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Something went wrong');
+        showResults(data);
+      } catch (e) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('form-section').style.display = 'block';
+        showError(e.message);
+      }
+    }
+
+    function showResults(data) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('results').style.display = 'block';
+
+      // Score
+      document.getElementById('score-number').textContent = data.score;
+      document.getElementById('score-message').textContent = data.message;
+      document.getElementById('names-label').textContent = `${data.person1_name} & ${data.person2_name}`;
+      document.getElementById('energy-score').textContent = data.energy_score;
+      document.getElementById('tempo-score').textContent = data.tempo_score;
+      document.getElementById('valence-score').textContent = data.valence_score;
+
+      // Vibes
+      document.getElementById('vibe1-name').textContent = data.person1_name;
+      document.getElementById('vibe1-label').textContent = data.vibe1;
+      document.getElementById('vibe2-name').textContent = data.person2_name;
+      document.getElementById('vibe2-label').textContent = data.vibe2;
+
+      // Recommendations
+      const recsList = document.getElementById('recs-list');
+      if (data.recommendations && data.recommendations.length) {
+        recsList.innerHTML = data.recommendations.map(r => `
+      <a class="rec-item" href="${r.url}" target="_blank" rel="noopener">
+        ${r.image ? `<img class="rec-art" src="${r.image}" alt=""/>` : '<div class="rec-art"></div>'}
+        <div class="rec-info">
+          <div class="rec-name">${esc(r.name)}</div>
+          <div class="rec-artist">${esc(r.artist)}</div>
+        </div>
+      </a>
+    `).join('');
+      } else {
+        recsList.innerHTML = '<p style="color:var(--muted);font-size:13px">No recommendations found — try different songs.</p>';
+      }
+
+      // Each person's song list
+      document.getElementById('songs1-title').textContent = `${data.person1_name}'s songs`;
+      document.getElementById('songs2-title').textContent = `${data.person2_name}'s songs`;
+      renderSongs('songs1-list', data.songs1);
+      renderSongs('songs2-list', data.songs2);
+    }
+
+    function renderSongs(containerId, songs) {
+      document.getElementById(containerId).innerHTML = songs.map(s => `
+    <div class="song-item">
+      ${s.image ? `<img class="song-art" src="${s.image}" alt=""/>` : '<div class="song-art"></div>'}
+      <div>
+        <div class="song-title">${esc(s.name)}</div>
+        <div class="song-artist">${esc(s.artist)}</div>
+      </div>
+    </div>
+  `).join('');
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error-msg');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function reset() {
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('form-section').style.display = 'block';
+      document.getElementById('error-msg').style.display = 'none';
+    }
+
+    function esc(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // ─── Autocomplete (Spotify via backend /suggest) ───────────────────────────
+    // Previously used iTunes Search API directly from the browser, which had
+    // CORS flakiness and sometimes returned no art or missing tracks.
+    // Now we proxy through our own /suggest endpoint which uses Spotify — the
+    // same source the matching engine uses, so results are always consistent.
+    const SUGGEST_DEBOUNCE_MS = 280;
+    const SUGGEST_LIMIT = 7;
+    const SUGGEST_MIN_CHARS = 2;
+
+    function setupAutocomplete() {
+      document.querySelectorAll('.song-input').forEach(input => {
+        // Wrap the input so we can position a dropdown panel right under it.
+        // We do this in JS so the existing markup stays clean.
+        const wrap = document.createElement('div');
+        wrap.className = 'song-input-wrap';
+        input.parentNode.insertBefore(wrap, input);
+        wrap.appendChild(input);
+
+        const panel = document.createElement('div');
+        panel.className = 'suggestions';
+        panel.hidden = true;
+        wrap.appendChild(panel);
+
+        let timer = null;
+        let lastQuery = '';
+        let reqId = 0;  // guard against out-of-order responses
+
+        input.addEventListener('input', () => {
+          const q = input.value.trim();
+          clearTimeout(timer);
+          if (q.length < SUGGEST_MIN_CHARS) {
+            panel.hidden = true;
+            panel.innerHTML = '';
+            lastQuery = '';
+            return;
+          }
+          if (q === lastQuery) return;
+          lastQuery = q;
+          timer = setTimeout(() => fetchSuggestions(q, panel, input, ++reqId, () => reqId), SUGGEST_DEBOUNCE_MS);
+        });
+
+        input.addEventListener('focus', () => {
+          // If we already have suggestions for the current text, show them again.
+          if (panel.children.length && input.value.trim().length >= SUGGEST_MIN_CHARS) {
+            panel.hidden = false;
+          }
+        });
+
+        // Hide on blur, but with a small delay so a click on a suggestion still fires.
+        input.addEventListener('blur', () => {
+          setTimeout(() => { panel.hidden = true; }, 150);
+        });
+      });
+    }
+
+    async function fetchSuggestions(query, panel, input, myId, getCurrentId) {
+      panel.hidden = false;
+      panel.innerHTML = '<div class="suggestions-status">Searching…</div>';
+      try {
+        const url = `${API}/suggest?q=${encodeURIComponent(query)}&limit=${SUGGEST_LIMIT}`;
+        const res = await fetch(url);
+        if (myId !== getCurrentId()) return;
+        if (!res.ok) throw new Error('suggest failed');
+        const results = await res.json();
+
+        if (!results.length) {
+          panel.innerHTML = '<div class="suggestions-status">No matches — keep typing or enter freely</div>';
+          return;
+        }
+
+        panel.innerHTML = results.map((r, i) => `
+          <div class="suggestion-item" data-i="${i}">
+            ${r.image
+              ? `<img class="suggestion-art" src="${esc(r.image)}" alt="" loading="lazy"/>`
+              : '<div class="suggestion-art"></div>'}
+            <div class="suggestion-text">
+              <div class="suggestion-name">${esc(r.name)}</div>
+              <div class="suggestion-artist">${esc(r.artist)}</div>
+            </div>
+          </div>
+        `).join('');
+
+        panel.querySelectorAll('.suggestion-item').forEach((el, i) => {
+          // mousedown fires before blur so the panel doesn't hide before click.
+          el.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            const r = results[i];
+            input.value = `${r.name} ${r.artist}`.trim();
+            panel.hidden = true;
+          });
+        });
+      } catch (e) {
+        if (myId !== getCurrentId()) return;
+        panel.innerHTML = '<div class="suggestions-status">Couldn\'t load suggestions — type freely</div>';
+      }
+    }
+
+    // Run after DOM is parsed.
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupAutocomplete);
+    } else {
+      setupAutocomplete();
+    }
+  </script>
+</body>
+
+</html>
