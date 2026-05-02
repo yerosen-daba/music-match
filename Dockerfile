@@ -16,4 +16,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run the FastAPI server
-CMD ["uvicorn", "app_v2:app", "--host", "0.0.0.0", "--port", "10000"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "10000"]
