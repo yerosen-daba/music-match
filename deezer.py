@@ -1,6 +1,5 @@
 import asyncio
 import client
-from audio import analyze_preview
 
 DEEZER_SEARCH = "https://api.deezer.com/search"
 DEEZER_TRACK  = "https://api.deezer.com/track"
@@ -43,9 +42,8 @@ async def search_track(query: str) -> dict | None:
     }
 
 async def enrich_track(track: dict) -> dict:
-    """
-    Fetch full track details from Deezer (BPM, preview URL, release date)
-    then analyze the preview audio with librosa for energy/tempo/valence.
+    Fetch full track details from Deezer (BPM, rank, release date).
+    Uses metadata proxies for energy and valence to maximize performance.
     """
     deezer_id = track.get("deezer_id")
 

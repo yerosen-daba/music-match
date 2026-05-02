@@ -1,3 +1,8 @@
+"""
+client.py
+
+A singleton holding the async HTTP client to ensure connection pooling and avoid memory leaks.
+"""
 import httpx
 
 # Global HTTP client to be shared across modules.

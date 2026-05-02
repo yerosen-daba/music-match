@@ -1,7 +1,7 @@
 """
-app_v2.py — Music Match Backend (Modular Edition)
+app.py — Music Byy Backend
 
-Main entry point for the FastAPI server.
+Main entry point for the FastAPI server. Handles routing and HTTP responses.
 """
 
 import asyncio
