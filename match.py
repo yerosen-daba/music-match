@@ -11,8 +11,10 @@ Compatibility scoring:
 
 Recommendations:
   * Compute the midpoint vector between the two users.
-  * Search the ENTIRE cached feature pool for the songs whose vectors are
-    closest to that midpoint (cosine similarity, vectorized in numpy).
+  * Find the cached songs closest to that midpoint. Primary path: pgvector
+    HNSW index inside Postgres (memory-flat, scales to millions of rows).
+    Fallback path: the legacy in-memory numpy matrix, used only when the
+    pgvector extension isn't available.
   * Return the top 6 with unique artists, excluding the input songs/artists.
   * Quality scales with cache size — a 5k-song cache produces dramatically
     richer discovery than a 500-song cache. The prewarm script is what
@@ -27,6 +29,7 @@ import numpy as np
 
 import analyzer
 import cache
+import deezer
 
 
 # ─── Subscore configuration ──────────────────────────────────────────────────
@@ -235,13 +238,27 @@ def _vibe_label(valid_songs: list[dict]) -> str:
     return " / ".join(parts)
 
 
-# ─── Vector-pool matrix (in-process cache of all cached song vectors) ───────
+# ─── Candidate search ────────────────────────────────────────────────────────
 #
-# Recommendations work by computing cosine similarity between the midpoint
-# vector and EVERY cached song's vector. Pulling thousands of rows from
-# Postgres on every request would be wasteful, so we load them once into a
-# numpy matrix kept in memory, refresh on a TTL, and do the cosine
-# computation as one vectorized matrix multiply.
+# How many nearest neighbors to overfetch before filtering. The filters
+# (exclude input songs/artists, one track per artist) reject some of the
+# top hits, so we pull comfortably more than the 6 we return.
+
+RECS_OVERFETCH = 120
+
+
+async def _candidates_from_pgvector(midpoint: np.ndarray) -> list[tuple[float, dict]]:
+    """Nearest neighbors via the HNSW index inside Postgres."""
+    rows = await cache.nearest_neighbors(midpoint.tolist(), limit=RECS_OVERFETCH)
+    return [(float(r["cosine_sim"]), r) for r in rows]
+
+
+# ─── Legacy fallback: in-process matrix of all cached song vectors ───────────
+#
+# Used only when the pgvector extension isn't available. Loads every cached
+# vector into a numpy matrix on a TTL and does one vectorized multiply per
+# request. Works fine to ~100k tracks; beyond that, memory and reload cost
+# grow linearly — which is exactly why the pgvector path exists.
 
 _vector_matrix: np.ndarray | None = None  # shape (N, 53), float32
 _vector_norms:  np.ndarray | None = None  # shape (N,), precomputed for cosine
@@ -286,6 +303,27 @@ async def _ensure_vector_matrix() -> None:
         _matrix_loaded_at = now
 
 
+async def _candidates_from_matrix(midpoint: np.ndarray) -> list[tuple[float, dict]]:
+    """Nearest neighbors via the legacy in-memory matrix."""
+    midpoint = midpoint.astype(np.float32)
+    midpoint_norm = float(np.linalg.norm(midpoint))
+    if midpoint_norm == 0.0:
+        return []
+
+    await _ensure_vector_matrix()
+    if _vector_matrix is None or _vector_matrix.shape[0] == 0:
+        return []
+
+    # Vectorized cosine similarity:
+    #   sim_i = (matrix[i] · midpoint) / (||matrix[i]|| · ||midpoint||)
+    dots = _vector_matrix @ midpoint
+    denom = (_vector_norms * midpoint_norm) + 1e-9
+    similarities = dots / denom
+
+    top = np.argsort(-similarities)[:RECS_OVERFETCH]
+    return [(float(similarities[i]), _vector_meta[int(i)]) for i in top]
+
+
 # ─── Midpoint nearest-neighbor recommendations ──────────────────────────────
 
 async def get_recommendations(songs1: list[dict], songs2: list[dict]) -> list[dict]:
@@ -308,22 +346,16 @@ async def get_recommendations(songs1: list[dict], songs2: list[dict]) -> list[di
     # The midpoint = the geometric center between two users' tastes. Songs
     # near here are the "sonic intersection" of what they each individually
     # like — by construction, they should appeal to both.
-    midpoint = ((u1 + u2) / 2.0).astype(np.float32)
-    midpoint_norm = float(np.linalg.norm(midpoint))
-    if midpoint_norm == 0.0:
-        return []
+    midpoint = (u1 + u2) / 2.0
 
-    # Load (or refresh) the in-memory matrix.
-    await _ensure_vector_matrix()
-    if _vector_matrix is None or _vector_matrix.shape[0] == 0:
+    # Primary path: indexed nearest-neighbor search inside Postgres.
+    # Fallback: legacy in-memory matrix (pgvector extension unavailable).
+    if cache.pgvector_enabled():
+        candidates = await _candidates_from_pgvector(midpoint)
+    else:
+        candidates = await _candidates_from_matrix(midpoint)
+    if not candidates:
         return []
-
-    # Vectorized cosine similarity:
-    #   sim_i = (matrix[i] · midpoint) / (||matrix[i]|| · ||midpoint||)
-    # One matrix-vector multiply, one elementwise divide, done.
-    dots = _vector_matrix @ midpoint
-    denom = (_vector_norms * midpoint_norm) + 1e-9
-    similarities = dots / denom
 
     # Exclusion sets — don't recommend songs/artists the user already typed.
     exclude_track_ids: set[str] = set()
@@ -333,18 +365,14 @@ async def get_recommendations(songs1: list[dict], songs2: list[dict]) -> list[di
         if s.get("deezer_id"): exclude_track_ids.add(str(s["deezer_id"]))
         if s.get("artist_id"): exclude_artist_ids.add(str(s["artist_id"]))
 
-    # Walk sorted indices (highest similarity first), pick first 6 that
+    # Walk candidates (highest similarity first), pick first 6 that
     # pass the filters AND have a unique artist.
-    order = np.argsort(-similarities)
-
     final: list[dict] = []
     used_artists: set[str] = set()
-    for idx in order:
-        sim = float(similarities[idx])
+    for sim, entry in candidates:
         if sim <= 0.0:
             break  # cosine ≤ 0 means the song is no more similar than random
 
-        entry     = _vector_meta[int(idx)]
         deezer_id = str(entry.get("deezer_id") or "")
         artist_id = str(entry.get("artist_id") or "")
 
@@ -356,15 +384,28 @@ async def get_recommendations(songs1: list[dict], songs2: list[dict]) -> list[di
             continue
 
         final.append({
-            "name":   entry.get("track_name")  or "",
-            "artist": entry.get("artist_name") or "",
-            "image":  entry.get("track_image") or "",
-            "url":    entry.get("track_url")   or "",
+            "name":      entry.get("track_name")  or "",
+            "artist":    entry.get("artist_name") or "",
+            "image":     entry.get("track_image") or "",
+            "url":       entry.get("track_url")   or "",
+            "deezer_id": deezer_id,
+            # How close this song sits to the couple's midpoint, expressed
+            # on the same perceptual scale as the compatibility score.
+            "match":     round(_to_unit(sim) * 100),
         })
         if artist_id:
             used_artists.add(artist_id)
 
         if len(final) >= 6:
             break
+
+    # Attach fresh 30s preview URLs so the frontend can play recommendations
+    # inline. Fetched in parallel; a failed lookup just means no play button.
+    previews = await asyncio.gather(
+        *[deezer.get_preview_url(r["deezer_id"]) for r in final]
+    )
+    for rec, preview in zip(final, previews):
+        rec["preview"] = preview
+        del rec["deezer_id"]
 
     return final
