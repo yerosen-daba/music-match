@@ -11,10 +11,12 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.middleware.gzip import GZipMiddleware
+from pydantic import BaseModel, Field
 
 import cache
 import client
+import itunes
 from deezer import DEEZER_SEARCH, search_many_tracks
 from match import compute_compatibility, compatibility_message, get_recommendations
 
@@ -60,7 +62,7 @@ async def lifespan(app):
     await client.http_client.aclose()
     await cache.close_pool()
 
-app = FastAPI(title="Music Match v2 (Modular)", lifespan=lifespan)
+app = FastAPI(title="Music Byy API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -68,12 +70,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 class MatchRequest(BaseModel):
-    person1_name:  str
-    person1_songs: list[str]
-    person2_name:  str
-    person2_songs: list[str]
+    person1_name:  str = Field(min_length=1, max_length=40)
+    person1_songs: list[str] = Field(min_length=1, max_length=10)
+    person2_name:  str = Field(min_length=1, max_length=40)
+    person2_songs: list[str] = Field(min_length=1, max_length=10)
+
+
+def _clean_queries(songs: list[str]) -> list[str]:
+    """Trim, drop empties, dedupe (case-insensitive, order-preserving)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for s in songs:
+        q = s.strip()[:200]
+        key = q.lower()
+        if q and key not in seen:
+            seen.add(key)
+            out.append(q)
+    return out
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -90,9 +106,14 @@ def _strip_internal_fields(track: dict) -> dict:
 
 @app.post("/match")
 async def match(data: MatchRequest):
+    queries1 = _clean_queries(data.person1_songs)
+    queries2 = _clean_queries(data.person2_songs)
+    if not queries1 or not queries2:
+        raise HTTPException(status_code=400, detail="Both people need at least one song.")
+
     tracks1, tracks2 = await asyncio.gather(
-        search_many_tracks(data.person1_songs),
-        search_many_tracks(data.person2_songs),
+        search_many_tracks(queries1),
+        search_many_tracks(queries2),
     )
     if not tracks1 or not tracks2:
         raise HTTPException(status_code=400, detail="Couldn't find songs. Try different names.")
@@ -120,15 +141,15 @@ async def match(data: MatchRequest):
         "details":            score["details"],
     }
 
-@app.get("/suggest")
-async def suggest(q: str, limit: int = 7):
-    """Deezer-backed autocomplete. No auth required."""
-    if not q or len(q.strip()) < 2:
+async def _deezer_suggest(q: str, limit: int) -> list[dict]:
+    """Deezer autocomplete candidates. Never raises."""
+    try:
+        r = await client.http_client.get(
+            DEEZER_SEARCH, params={"q": q, "limit": limit}, timeout=6.0,
+        )
+        results = r.json().get("data", []) or []
+    except Exception:
         return []
-    r = await client.http_client.get(DEEZER_SEARCH, params={
-        "q": q, "limit": min(limit, 10),
-    })
-    results = r.json().get("data", []) or []
     return [
         {
             "name":   t.get("title", ""),
@@ -136,8 +157,50 @@ async def suggest(q: str, limit: int = 7):
             "image":  t.get("album", {}).get("cover_small", ""),
         }
         for t in results
+        if t.get("title")
     ]
+
+
+@app.get("/suggest")
+async def suggest(q: str, limit: int = 7):
+    """Autocomplete backed by Deezer AND Apple's catalog, merged.
+
+    Both searches run concurrently, so the union costs no extra latency.
+    Deezer results rank first (its previews are our primary source); iTunes
+    fills in tracks Deezer doesn't index. Never 500s — either source
+    failing just narrows the list.
+    """
+    if not q or len(q.strip()) < 2:
+        return []
+    q = q.strip()[:200]
+    limit = min(max(limit, 1), 12)
+
+    deezer_results, itunes_results = await asyncio.gather(
+        _deezer_suggest(q, limit),
+        itunes.suggest(q, limit=5),
+    )
+
+    seen: set[tuple[str, str]] = set()
+    out = []
+    for t in deezer_results + itunes_results:
+        key = (t["name"].lower(), t["artist"].lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+        if len(out) >= limit:
+            break
+    return out
+
+@app.get("/health")
+async def health():
+    """Liveness + cache-size probe. Cheap enough to poll."""
+    try:
+        cached = await cache.count_cached()
+    except Exception:
+        cached = -1
+    return {"status": "ok", "cached_tracks": cached}
 
 @app.get("/")
 async def home():
-    return {"message": "Music Match API v2 (Modular) is running"}
+    return {"message": "Music Byy API is running", "docs": "/docs"}

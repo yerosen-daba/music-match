@@ -16,15 +16,18 @@ import asyncio
 import analyzer
 import cache
 import client
+import itunes
 
 
 DEEZER_SEARCH = "https://api.deezer.com/search"
 DEEZER_TRACK  = "https://api.deezer.com/track"
 
-# Cap concurrent audio analyses so we don't OOM the 512MB Render dyno.
-# librosa peaks around ~150MB per analysis; 3 concurrent leaves headroom
-# for the FastAPI process itself and the Postgres pool.
-_analysis_semaphore = asyncio.Semaphore(3)
+# Cap concurrent audio analyses to 1. Empirically, even with HF Spaces'
+# nominal 16GB free tier, running multiple librosa instances concurrently
+# (each ~300MB peak) alongside the in-memory vector matrix has caused
+# silent OOM kills on production. Sequential analysis is slower per
+# request but guarantees stability.
+_analysis_semaphore = asyncio.Semaphore(1)
 
 
 # ─── Search ──────────────────────────────────────────────────────────────────
@@ -132,11 +135,38 @@ async def enrich_track(track: dict) -> dict:
     }
 
 
+async def get_preview_url(deezer_id: str | int) -> str:
+    """Fetch a track's 30-second preview URL. Empty string on failure.
+
+    The feature cache doesn't store preview URLs (they're signed and expire),
+    so the recommender calls this at response time for the handful of tracks
+    it's about to return. IDs prefixed "it:" live in Apple's catalog and are
+    resolved via iTunes lookup instead.
+    """
+    if not deezer_id:
+        return ""
+    sid = str(deezer_id)
+    if sid.startswith(itunes.ID_PREFIX):
+        return await itunes.get_preview_url(sid[len(itunes.ID_PREFIX):])
+    try:
+        r = await client.http_client.get(f"{DEEZER_TRACK}/{sid}")
+        return (r.json() or {}).get("preview", "") or ""
+    except Exception:
+        return ""
+
+
 # ─── Composite helpers ───────────────────────────────────────────────────────
 
 async def search_and_enrich(query: str) -> dict | None:
-    """Convenience: search Deezer for a query, then run enrichment."""
+    """Search Deezer for a query, then run enrichment.
+
+    Falls back to searching Apple's catalog when Deezer misses entirely —
+    without this, a song Deezer hasn't indexed silently vanishes from the
+    user's results even though iTunes could have analyzed it.
+    """
     track = await search_track(query)
+    if not track:
+        track = await itunes.search_track(query)
     if not track:
         return None
     return await enrich_track(track)
